@@ -343,7 +343,28 @@ class DeltaBot(object):
 
         return (log, message, awardee)
 
+    def check_for_OP_reply(self, comment):
+        log = "Not OP, reply count not increased"
+        if comment.link_author == comment.author.name:
+            log = "OP has replied, increasing reply count"
+        return (log, comment.submission)
+        
 
+    def increase_reply_count(self, submission):
+        currentReplies = self.get_replies_amount(submission)
+        currentClass = self.config.replies_prefix + str(currentReplies)
+        newClass = self.config.replies_prefix + str(currentReplies+1)
+        newCSS = submission.link_flair_css_class.replace(currentClass, newClass)
+        
+        # Check if "No OP Replies" needs updating
+        if (currentReplies + 1 >= self.config.replies_required 
+                and self.config.no_op_replies_flair['css_class'] in submission.link_flair_css_class):
+            logging.info("Submission has finally got enough replies to pass")
+            newCSS = newCSS.replace(self.config.no_op_replies_flair['css_class'], "")
+            submission.set_flair("", newCSS)
+        else:
+            submission.set_flair(submission.link_flair_text, newCSS)
+        
     # Wrapper function to keep side effects out of scan_comments
     def scan_comment_wrapper(self, comment, strict=True):
         parent = self.reddit.get_info(thing_id=comment.parent_id)
@@ -361,7 +382,12 @@ class DeltaBot(object):
         if awardee:
             self.award_points(awardee, comment)
 
-
+        log, submission = self.check_for_OP_reply(comment)
+        
+        logging.info(log)
+        
+        if submission:
+            self.increase_reply_count(submission)
 
     def scan_comments(self):
         """ Scan a given list of comments for tokens. If a token is found,
@@ -398,6 +424,40 @@ class DeltaBot(object):
         mod_names = [mod.name for mod in moderators]
         return name in mod_names
 
+    def scan_submissions(self):
+        logging.info("Scanning submissions")
+        submissions = self.subreddit.get_new()  
+        
+        # Either sets submission as new (if not done already) or elevates once time is up
+        for submission in submissions:
+            timeSinceCreation = time.time() - submission.created_utc
+            # If no longer new yet still labelled as such update accordingly
+            if (timeSinceCreation > self.config.new_duration 
+                    and self.config.new_flair['css_class'] in submission.link_flair_css_class):
+                # Check if post has required number of comments to pass inspection
+                replies = self.get_replies_amount(submission)
+                if replies < self.config.replies_required:
+                    logging.info("Submission hasn't got enough replies, fails!")
+                    cssClass = submission.link_flair_css_class.replace(self.config.new_flair['css_class'], self.config.no_op_replies_flair['css_class'])
+                    submission.set_flair(self.config.no_op_replies_flair['text'], cssClass)
+                else:
+                    #Pass, remove new flair
+                    logging.info("Submission has got enough replies, pass!")
+                    cssClass = submission.link_flair_css_class.replace(self.config.new_flair['css_class'], "")
+                    submission.set_flair("", cssClass)
+            elif timeSinceCreation < self.config.new_duration:
+                # This is new and should be tagged as such if not already
+                if self.config.new_flair['css_class'] not in submission.link_flair_css_class:
+                    logging.info("New submission found")
+                    submission.set_flair(self.config.new_flair['text'], self.config.new_flair['css_class'])
+            
+    def get_replies_amount(self, submission):
+        replies = re.search('(?<='+ self.config.replies_prefix +')\d+', str(submission.link_flair_css_class))
+        if replies:
+            replies = int(replies.group(0))
+        else:
+            replies = 0
+        return replies
 
     def scan_message(self, message):
         logging.info("Scanning message %s from %s" % (message.name,
@@ -716,6 +776,7 @@ class DeltaBot(object):
             logging.info("Starting iteration at %s" % old_before_id or "None")
 
             try:
+                self.scan_submissions()
                 self.scan_inbox()
                 self.scan_mod_mail()
                 self.scan_comments()

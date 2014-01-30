@@ -40,6 +40,24 @@
         "css_class": "points"
     },
 
+    "new_flair": {
+        "_comment" : "Text can be blank, css_class cannot (it is used to identify new submissions)",
+        "text": "New",
+        "css_class": "new"
+    },
+    
+    "no_op_replies_flair": {
+        "text": "No OP Replies",
+        "css_class": "noreplies"
+    },
+    
+    
+    "new_duration": 3600,
+    
+    "replies_prefix": "replies-",
+    
+    "replies_required": 1,
+    
     "last_comment_filename": "prev_id.txt",
 
     "minimum_comment_length": 100,
