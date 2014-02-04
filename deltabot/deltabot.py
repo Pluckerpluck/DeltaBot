@@ -345,9 +345,11 @@ class DeltaBot(object):
 
     def check_for_OP_reply(self, comment):
         log = "Not OP, reply count not increased"
+        submission = None
         if comment.link_author == comment.author.name:
             log = "OP has replied, increasing reply count"
-        return (log, comment.submission)
+            submission = comment.submission
+        return (log, submission)
         
 
     def increase_reply_count(self, submission):
